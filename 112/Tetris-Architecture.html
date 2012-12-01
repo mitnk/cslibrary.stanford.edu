@@ -1,0 +1,247 @@
+<!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="GENERATOR" content="Mozilla/4.77 (Macintosh; U; PPC) [Netscape]">
+   <title>Tetris Overview</title>
+</head>
+<body bgcolor="#FFFFFF">
+
+<h1>
+Tetris Architecture Overview</h1>
+Nick Parlante, nick.parlante@cs.stanford.edu
+<p>This is the architectural overview that describes the Tetris classes.
+The tetris project lives at the Stanford CS Ed library as document #112
+(<a href="http://cslibrary.stanford.edu/112/">http://cslibrary.stanford.edu/112/</a>).
+See the Readme for an introduction to the project and instructions for
+running the program.
+<p>These Tetris classes provide a framework for a few different Tetris
+applications. For a fun little assignment, students can write their own
+"brain" AI code (surprisingly easy), and then load it into the provided
+JTetris GUI to see how it plays. For 2nd year CS undergraduates, we have
+a fairly difficult assignment where they implement all the main tetris
+classes. This makes a nice exercise in OOP decomposition -- dividing the
+rather large Tetris problem into several non-trivial classes that cooperate
+to solve the whole thing.
+<p>The classes that make up Tetris are...
+<ul>
+<li>
+Piece -- a single tetris piece</li>
+
+<li>
+Board -- the tetris board</li>
+
+<li>
+JPieceTest / JBoardTest -- tester classes for Piece and Board</li>
+
+<li>
+JTetris -- present the GUI for tetris in a window and do the animation</li>
+
+<li>
+LameBrain -- simple heuristic logic that knows how to play tetris</li>
+
+<li>
+JBrainTetris -- a subclass of JTetris that uses a brain to play the game
+without a human player</li>
+</ul>
+As an additional feature, the tetris classes implement the logic for tetris
+in a way that runs <b>quickly</b>. The speed is needed for the later "brain"
+parts of the project.
+<h2>
+Piece</h2>
+The Piece class defines a tetris piece in a particular rotation. Each piece
+is defined by a number of blocks known as its "body". The body is represented
+by the (x, y) coordinates of its blocks, with the origin in the lower-left
+corner.
+<br><img SRC="piece.gif" BORDER=0 height=92 width=102>
+<br>So the body of this piece is defined by the (x, y) points :&nbsp; (0,
+0), (1, 0), (1, 1), (2, 1).
+<p>The Piece class and the Board class (below) both measure things in this
+way -- block by block with the origin in the lower-left corner. As a design
+decision, the Piece and Board classes do not know about pixels -- they
+measure everything block by block. Or put another way, all the knowledge
+of pixels is isolated in the JTetris class.
+<p>Each piece responds to the messages like getWidth(), getHeight(), and
+getBody() that allow the client to see the state of the piece. The getSkirt()
+message returns an array that shows the lowest y value for each x value
+across the piece ({0, 0, 1} for the piece above). The skirt makes it easier
+to compute how a piece will come to land in the board. There are no messages
+that change a piece -- it is "immutable". To allow the client to see the
+various piece rotations that are available, the Piece class builds an array
+of the standard tetris pieces internally -- available through the Piece.getPieces().
+This array contains the first rotation of each of the standard pieces.
+Starting with any piece, the nextRotation() message returns the "next"
+piece object that represents the next counter-clockwise rotation. Enough
+calls to nextRotation() gets the caller back to the original piece.
+<h2>
+Board</h2>
+The Board class stores the 2-d state of the tetris board. The client uses
+the place() message to add the blocks of a piece into the board. Once the
+blocks are in the board, they are not connected to each other as a piece
+any more; they are just 4 adjacent blocks that will eventually get separated
+by row-clearing.
+<ul>
+<li>
+place(piece, x, y) -- add a piece into the board with its lower-left corner
+at the given (x, y)</li>
+
+<li>
+clearRows() -- compact the board downwards by clearing any filled rows</li>
+</ul>
+Board has many methods that allow the client to look at the Board state.
+These all run in constant time -- makes things easy and fast for the client,
+but harder for the board implementation...
+<ul>
+<li>
+int getWidth() -- how many blocks wide is the board</li>
+
+<li>
+int getHeight() -- how many blocks high is the board</li>
+
+<li>
+int getRowWidth(y) -- the number of filled blocks in the given horizontal
+row</li>
+
+<li>
+int getColumnHeight(x) -- the height the board is filled in the given column.
+This is 1 + the y value of the highest filled block</li>
+
+<li>
+int getMaximumHeight() -- the max of the getColumnHeight() values</li>
+
+<li>
+int dropHeight(piece, x) -- the y value where the origin (lower left corner)
+of the given piece would come to rest if the piece dropped straight down
+at the given x</li>
+</ul>
+
+<h3>
+Board Undo</h3>
+The Board also supports a 1-deep undo() facility that allows the client
+to undo the most recent placement and/or row clearing. The undo facility
+is rather limited -- the client can do a single place() and a single clearRows(),
+and then use undo() to return to the original state. Although simple, the
+undo facility is fast. It turns out that the Brain (below) needs exactly
+this facility of a simple but fast undo. Here's how undo works...
+<ul>
+<li>
+We'll designate the&nbsp; state of the board as "committed"&nbsp; -- a
+state that can be returned to.</li>
+
+<li>
+From a committed state, the client can do a place() operation that modifies
+the board. An undo() will remove the change so the board is back at the
+committed state.</li>
+
+<li>
+Then the client can do a clearRows() operation which further modifies the
+board. An undo() will remove all the changes so the board is back at the
+committed state.</li>
+
+<li>
+Finally, the client can do a commit() operation which marks the current
+state as the new committed state. The previous committed state can no longer
+be reached via undo().</li>
+</ul>
+A client can use the undo facility to animate a piece moving in the board
+like this: place() piece with y=15, pause, undo(), place() with y=14, pause,
+undo(), place() with y=13, ...
+<h2>
+JPieceTest, JBoardTest</h2>
+These are simple test classes that exercise the Piece and Board respectively.
+Tetris is complex enough that it's important to build and test the components
+separately.
+<h2>
+JTetris</h2>
+The JTetris class presents the GUI for a playable tetris game in a window.
+It uses Piece and Board to do the real work. Usually, I have the students
+write Piece and Board, but I provide JTetris.
+<h2>
+JBrainTetris</h2>
+JBrainTetris is a subclass of JTetris that uses the LameBrain (below) or
+another loaded brain to play tetris without a human player. JBrainTetris
+can also implement an "adversary" feature. The adversary is a cruel yet
+hilarious feature where the game figures out what the worst possible next
+piece is (using the brain), and then gives that piece to the player.
+<h2>
+LameBrain</h2>
+LameBrain includes heuristic logic that knows how to play the game of tetris.
+The LameBrain algorithm is very simple -- it knows that height is bad and
+creating holes is bad. Students can write their own brains. Here is the
+code...
+<p><tt>/*</tt>
+<br><tt>&nbsp;A simple brain function.</tt>
+<br><tt>&nbsp;Given a board, produce a number that rates</tt>
+<br><tt>&nbsp;that board position -- larger numbers for worse boards.</tt>
+<br><tt>&nbsp;This version just counts the height</tt>
+<br><tt>&nbsp;and the number of "holes" in the board.</tt>
+<br><tt>&nbsp;See Tetris-Overview.html for brain ideas.</tt>
+<br><tt>*/</tt>
+<br><tt>public double rateBoard(Board board) {</tt>
+<br><tt>&nbsp;final int width = board.getWidth();</tt>
+<br><tt>&nbsp;final int maxHeight = board.getMaxHeight();</tt>
+<p><tt>&nbsp;int sumHeight = 0;</tt>
+<br><tt>&nbsp;int holes = 0;</tt>
+<p><tt>&nbsp;// Count the holes, and sum up the heights</tt>
+<br><tt>&nbsp;for (int x=0; x&lt;width; x++) {</tt>
+<br><tt>&nbsp; final int colHeight = board.getColumnHeight(x);</tt>
+<br><tt>&nbsp; sumHeight += colHeight;</tt>
+<p><tt>&nbsp; int y = colHeight - 2; // addr of first possible hole</tt>
+<p><tt>&nbsp; while (y>=0) {</tt>
+<br><tt>&nbsp;&nbsp; if&nbsp; (!board.getGrid(x,y)) {</tt>
+<br><tt>&nbsp;&nbsp;&nbsp; holes++;</tt>
+<br><tt>&nbsp;&nbsp; }</tt>
+<br><tt>&nbsp;&nbsp; y--;</tt>
+<br><tt>&nbsp; }</tt>
+<br><tt>&nbsp;}</tt>
+<p><tt>&nbsp;double avgHeight = ((double)sumHeight)/width;</tt>
+<p><tt>&nbsp;// Add up the counts to make an overall score</tt>
+<br><tt>&nbsp;// The weights, 8, 40, etc., are just made up numbers that
+appear to work</tt>
+<br><tt>&nbsp;return (8*maxHeight + 40*avgHeight + 1.25*holes);</tt>
+<br><tt>}</tt>
+<br>&nbsp;
+<p>It's pretty easy to write better brain logic, and that alone can be
+the basis of an assignment. Here's some suggestions for building a better
+brain (or don't look at these if you want to puzzle it out yourself) ...
+<ul>
+<li>
+Height is bad</li>
+
+<li>
+Holes are bad</li>
+
+<li>
+Stacking more blocks on top of holes is bad</li>
+
+<li>
+Holes that are horizontally adjacent to other holes are not quite as bad</li>
+
+<li>
+Holes that are vertically aligned with other holes are not quite as bad</li>
+
+<li>
+Tall 1-wide troughs are bad</li>
+
+<li>
+1-wide troughs are not so bad if they are only 1 or 2 deep. Think about
+which pieces could fill a 2-deep trough -- 1, 2, or 3 out of the 7 pieces
+depending on the two sides of the trough.</li>
+
+<li>
+Concentrate on issues that are near the current top of the pile. Holes
+that 10 levels below the top edge are not as important as holes that are
+immediately below the top edge.</li>
+
+<li>
+At some point, my brain code always has some arbitrary constants like 1.54
+and -0.76 in it that I can only lamely optimize by hand. To get the best
+possible brain, use a separate genetic algorithm to optimize the constants.
+This is another reason why the design here has such an emphasis on speed
+-- the genetic optimizer needs to be able to rip through millions of board
+positions.</li>
+</ul>
+
+<br>&nbsp;
+</body>
+</html>
